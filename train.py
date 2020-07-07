@@ -6,7 +6,6 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-
 from data_provider import data_utils
 
 # Set GPU to use
@@ -23,7 +22,18 @@ parser.add_argument('--dataDims', type=int, default=64, help='dimension of data'
 parser.add_argument('--fields', type=int, default=1, help='number fields of dataset')
 parser.add_argument('--max_seq_len', type=int, default=20, help='max sequence length')
 parser.add_argument('--batchSize', type=int, default=20, help='batch size')
+parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
+parser.add_argument('--beta1', default=0.9, type=float, help='momentum term for adam')
 
+
+parser.add_argument('--rnn_size', type=int, default=256, help='dimensionality of hidden layer')
+parser.add_argument('--prior_rnn_layers', type=int, default=1, help='number of layers')
+parser.add_argument('--posterior_rnn_layers', type=int, default=1, help='number of layers')
+parser.add_argument('--predictor_rnn_layers', type=int, default=2, help='number of layers')
+parser.add_argument('--z_dim', type=int, default=10, help='dimensionality of z_t. kth: 32')
+parser.add_argument('--g_dim', type=int, default=128, help='dimensionality of encoder output vector and decoder input vector')
+
+parser.add_argument('--skip_prob', type=float, default=0.1, help='probability to skip a frame in training.')
 
 opt = parser.parse_args()
 
@@ -42,3 +52,6 @@ train_data, test_data = data_utils.load_dataset(opt)
 train_generator = data_utils.data_generator(train_data, train=True, opt=opt)
 test_dl_generator = data_utils.data_generator(test_data, train=False, dynamic_length=True, opt=opt)
 
+### ! Setup Model ! ###
+from models.model import Model
+model = Model(opt=opt)
