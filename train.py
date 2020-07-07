@@ -1,9 +1,13 @@
+from __future__ import print_function
 import os
 import argparse
 import random
 import numpy as np
 
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
 from data_provider import data_utils
@@ -15,25 +19,18 @@ os.environ['CUDA_VISIBLE_DEVICES']='0'
 parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--manualSeed', type=int, default=1, help='manual seed')
-parser.add_argument('--dataset', required=True, default='channel_flow', help='channel_flow')
+parser.add_argument('--dataset', default='channel_flow', help='channel_flow')
 parser.add_argument('--dataroot', default='data/', help='path to dataset')
 parser.add_argument('--workers', type=int, default=2, help='number of data loading workers')
 parser.add_argument('--dataDims', type=int, default=64, help='dimension of data')
-parser.add_argument('--fields', type=int, default=1, help='number fields of dataset')
-parser.add_argument('--max_seq_len', type=int, default=20, help='max sequence length')
-parser.add_argument('--batchSize', type=int, default=20, help='batch size')
+parser.add_argument('--channels', type=int, default=1, help='number fields of dataset')
+parser.add_argument('--batchSize', type=int, default=5, help='batch size')
+parser.add_argument('--nepoches', type=int, default=10, help='number of epoches')
 parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
 parser.add_argument('--beta1', default=0.9, type=float, help='momentum term for adam')
 
 
-parser.add_argument('--rnn_size', type=int, default=256, help='dimensionality of hidden layer')
-parser.add_argument('--prior_rnn_layers', type=int, default=1, help='number of layers')
-parser.add_argument('--posterior_rnn_layers', type=int, default=1, help='number of layers')
-parser.add_argument('--predictor_rnn_layers', type=int, default=2, help='number of layers')
-parser.add_argument('--z_dim', type=int, default=10, help='dimensionality of z_t. kth: 32')
-parser.add_argument('--g_dim', type=int, default=128, help='dimensionality of encoder output vector and decoder input vector')
-
-parser.add_argument('--skip_prob', type=float, default=0.1, help='probability to skip a frame in training.')
+parser.add_argument('--encoder_dim', type=int, default=128, help='dimensionality of encoder output vector and decoder input vector')
 
 opt = parser.parse_args()
 
@@ -53,5 +50,29 @@ train_generator = data_utils.data_generator(train_data, train=True, opt=opt)
 test_dl_generator = data_utils.data_generator(test_data, train=False, dynamic_length=True, opt=opt)
 
 ### ! Setup Model ! ###
-from models.model import Model
-model = Model(opt=opt)
+import model.tssr as tssr
+model = tssr.TSSRModel(opt)
+
+### ! Loss function and optimizers ! ###
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+
+# Lists to keep track of progress
+# data_list = []
+# losses = []
+# iters = 0
+
+print("Start Training ...")
+for epoch in range(opt.nepoches):
+    for i, data in enumerate(train_generator):
+        # data size = batch size * 1 * 64 * 64 * 64
+        # data = next(iter(train_generator))
+        real_data = data.to(device)
+        output = model(real_data)
+        # print("output.size", output.shape)
+        loss = criterion(output, real_data)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        print('epoch [{}/{}], loss:{:.4f}'.format(epoch+1, opt.nepoches, loss.data))
+

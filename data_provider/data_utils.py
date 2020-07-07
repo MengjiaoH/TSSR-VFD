@@ -18,7 +18,6 @@ def load_dataset(opt):
             opt=opt
         )
 
-    
     return train_data, test_data
 
 def get_generator(loader, dynamic_length=True, opt=None):
@@ -40,6 +39,6 @@ def data_generator(data, train=True, dynamic_length=True, opt=None):
     else:
         loader = DataLoader(data, batch_size=opt.batchSize, shuffle=True, drop_last=True, num_workers=1)
     
-    generator = get_generator(loader, dynamic_length=dynamic_length, opt=opt)
+    # generator = get_generator(loader, dynamic_length=dynamic_length, opt=opt)
 
-    return generator
+    return loader

@@ -10,8 +10,8 @@ class ChannelFlowDataset(Dataset):
         self.root = os.path.join(data_root, 'channel_flow')
         self.train = train
         # self.transform = transform
-        self.max_seq_len = opt.max_seq_len
-        self.fields = opt.fields
+        # self.max_seq_len = opt.max_seq_len
+        self.fields = opt.channels
         self.dims = opt.dataDims
         self.seed_is_set = False
         self.opt = opt
@@ -54,6 +54,9 @@ class ChannelFlowDataset(Dataset):
             "n_data": n_data,
         })
 
+    def __len__(self):
+        return len(self.data[0]['seq'])  
+
     def set_seed(self, seed):
         if not self.seed_is_set:
             self.seed_is_set = True
@@ -69,16 +72,17 @@ class ChannelFlowDataset(Dataset):
 
     def __getitem__(self, idx):
         self.set_seed(idx)
+        seq = self.data[0]["seq"]
+        sample = seq[idx]
 
-        data = self.data[idx]
-        seq = data["seq"]
-        n_frames = data["n_data"]
+        return sample  
 
-        start_ix = np.random.randint(low=0, high=n_frames-self.max_seq_len+1)
-        end_ix   = start_ix + self.max_seq_len
 
-        seq = seq[start_ix:end_ix]
-        return seq
+# data = self.data[idx]
+# seq = data["seq"]
+# n_frames = data["n_data"]
 
-    def __len__(self):
-        return len(self.data)    
+# start_ix = np.random.randint(low=0, high=n_frames-self.max_seq_len+1)
+# end_ix   = start_ix + self.max_seq_len
+
+# seq = seq[start_ix:end_ix]
