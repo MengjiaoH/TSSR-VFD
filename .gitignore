@@ -2,3 +2,8 @@
 data/
 env/
 data_provider/__pycache__/
+tssr-env/
+model/__pycache__
+save_samples/
+
+

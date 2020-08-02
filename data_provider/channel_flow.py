@@ -6,20 +6,15 @@ from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
 class ChannelFlowDataset(Dataset):
-    def __init__(self, data_root='data', train=True, opt=None):
-        self.root = os.path.join(data_root, 'channel_flow')
+    def __init__(self, data_root='data', train=True, dims=(64, 64, 64), opt=None):
+        self.root = os.path.join(data_root, 'low_resolution')
         self.train = train
         # self.transform = transform
-        self.max_seq_len = opt.max_seq_len
-        self.fields = opt.fields
-        self.dims = opt.dataDims
+        self.seq_len = opt.seq_len
+        self.dims = dims
         self.seed_is_set = False
         self.opt = opt
 
-        # if self.transform is None:
-        #     self.transform = transforms.Compose([
-        #         transforms.ToTensor(),
-        #     ])
         self.data = []
 
         data_dir = os.path.join(self.root)
@@ -35,24 +30,25 @@ class ChannelFlowDataset(Dataset):
             end = len(datas)
         
         n_data = end - start
+        num_seq = n_data - self.seq_len + 1
 
-        seq = torch.zeros(n_data, self.fields, self.dims, self.dims, self.dims)
-
-        for t in range(start, end):
-            # load 3D data
-            data_name = datas[t]
-            data_path = os.path.join(self.root, data_name)
-            data = np.fromfile(data_path, dtype='float32')
-            data = np.reshape(data, (self.fields, self.dims, self.dims, self.dims))
-            # convert to tensor
-            T_data = torch.tensor(data)
-            # add to seq
-            seq[t - start] = T_data
+        for num in range(num_seq):
+            index = np.arange(num, num + self.seq_len)
+            seq = torch.zeros(self.seq_len, self.dims[0], self.dims[1], self.dims[2])
+            timesteps = torch.zeros(self.seq_len)
+            for i in index:
+                data_name = datas[i]
+                data_path = os.path.join(self.root, data_name)
+                data = np.fromfile(data_path, dtype='float32')
+                data = np.reshape(data, self.dims)
+                timesteps[i-num] = torch.tensor(int(data_name[6:9]))
+                T_data = torch.tensor(data)
+                seq[i-num] = T_data
         
-        self.data.append({
-            "seq" : seq,
-            "n_data": n_data,
-        })
+            self.data.append({
+                "seq" : seq,
+                "ts": timesteps,
+            })
 
     def set_seed(self, seed):
         if not self.seed_is_set:
@@ -67,18 +63,15 @@ class ChannelFlowDataset(Dataset):
 
         return seq_len
 
-    def __getitem__(self, idx):
-        self.set_seed(idx)
-
-        data = self.data[idx]
+    def __getitem__(self, index):
+        # self.set_seed(idx)
+        # print("index", index)
+        data = self.data[index]
         seq = data["seq"]
-        n_frames = data["n_data"]
+        ts = data["ts"]
 
-        start_ix = np.random.randint(low=0, high=n_frames-self.max_seq_len+1)
-        end_ix   = start_ix + self.max_seq_len
-
-        seq = seq[start_ix:end_ix]
-        return seq
+        return (seq, ts)
 
     def __len__(self):
+        # print(len(self.data))
         return len(self.data)    
