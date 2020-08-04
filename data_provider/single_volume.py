@@ -13,12 +13,13 @@ class SingleVolumeDataset(Dataset):
         self.data_root = data_root
         self.dims = dims
         self.mode = mode
+        self.seed_is_set = False
 
         files_dir = os.path.join(self.data_root)
         files = [file for file in os.listdir(files_dir) if file.endswith('.raw')]
         files = sorted(files)
         
-        num_train = len(files) * 10 // 10
+        num_train = len(files) * 7 // 10
         num_val = len(files) * 2 // 10 
         num_test = len(files) * 1 // 10 
         print(num_train, num_val, num_test)
@@ -51,6 +52,10 @@ class SingleVolumeDataset(Dataset):
                     "volume":temp_data,
                     "ts": timestep,
                 })
+    def set_seed(self, seed):
+        if not self.seed_is_set:
+            self.seed_is_set = True
+            np.random.seed(seed)
 
     def __len__(self):
         length = len(self.data)
@@ -58,6 +63,7 @@ class SingleVolumeDataset(Dataset):
         return length
     
     def __getitem__(self, index):
+        self.set_seed(index)
         data = self.data[index]
         volume = data["volume"]
         ts = [[data["ts"]]]

@@ -3,7 +3,7 @@ data/
 env/
 data_provider/__pycache__/
 tssr-env/
-model/__pycache__
+models/__pycache__
 save_samples/
 
 

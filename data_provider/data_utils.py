@@ -12,6 +12,12 @@ def load_dataset(opt):
             opt=opt
         )
 
+        val_data = ChannelFlowDataset(
+            mode = 'val',
+            data_root=opt.dataroot, 
+            opt=opt
+        )
+
         test_data = ChannelFlowDataset(
             mode = 'test',
             data_root=opt.dataroot, 

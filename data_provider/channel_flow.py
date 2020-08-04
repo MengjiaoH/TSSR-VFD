@@ -6,9 +6,10 @@ from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
 class ChannelFlowDataset(Dataset):
-    def __init__(self, data_root='data', train=True, dims=(64, 64, 64), opt=None):
-        self.root = os.path.join(data_root, 'low_resolution')
-        self.train = train
+    def __init__(self, mode, data_root, dims=(64, 64, 64), opt=None):
+        self.root = data_root
+        # os.path.join(data_root, 'low_resolution')
+        self.mode = mode
         # self.transform = transform
         self.seq_len = opt.seq_len
         self.dims = dims
@@ -21,16 +22,24 @@ class ChannelFlowDataset(Dataset):
         datas = [d for d in os.listdir(data_dir)]
         datas = sorted(datas)
         
-        num_train = len(datas) * 2 // 3
-        if self.train:
+        num_train = len(datas) * 10 // 10
+        num_val = len(datas) * 2 // 10 
+        num_test = len(datas) * 1 // 10 
+        print(num_train, num_val, num_test)
+
+        if self.mode == 'train':
             start = 0
             end = num_train
-        else:
+        elif self.mode == 'val':
             start = num_train
+            end = num_train + num_val
+        else:
+            start = num_train + num_val
             end = len(datas)
         
         n_data = end - start
         num_seq = n_data - self.seq_len + 1
+        print("num_seq", num_seq)
 
         for num in range(num_seq):
             index = np.arange(num, num + self.seq_len)
@@ -64,7 +73,7 @@ class ChannelFlowDataset(Dataset):
         return seq_len
 
     def __getitem__(self, index):
-        # self.set_seed(idx)
+        self.set_seed(index)
         # print("index", index)
         data = self.data[index]
         seq = data["seq"]
