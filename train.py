@@ -13,9 +13,10 @@ from torch.utils.data import DataLoader
 
 from data_provider import data_utils
 from models import convLSTM 
-from models import autoencoder
 from models import weight_init
+from models import spatial_feature
 from models import generator
+from models import discriminator
 
 # Set GPU to use
 os.environ['CUDA_VISIBLE_DEVICES']='0' 
@@ -24,17 +25,18 @@ os.environ['CUDA_VISIBLE_DEVICES']='0'
 parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--manualSeed', type=int, default=1, help='manual seed')
-parser.add_argument('--dataset', default='single_volume', help='channel_flow')
+parser.add_argument('--dataset', default='channel_flow', help='channel_flow')
 parser.add_argument('--dataroot', default='data/low_resolution', help='path to dataset')
 parser.add_argument('--workers', type=int, default=1, help='number of data loading workers')
 parser.add_argument('--dataDims', type=int, default=64, help='dimension of data')
 parser.add_argument('--fields', type=int, default=1, help='number fields of dataset')
-parser.add_argument('--seq_len', type=int, default=5, help='max sequence length')
-parser.add_argument('--n_epoches', type=int, default=100, help='number of epoches')
-parser.add_argument('--batchSize', type=int, default=10, help='batch size')
+parser.add_argument('--seq_len', type=int, default=4, help='max sequence length')
+parser.add_argument('--n_epoches', type=int, default=10, help='number of epoches')
+parser.add_argument('--batchSize', type=int, default=5, help='batch size')
 parser.add_argument('--ng', type=int, default=1, help='loop for generator')
 parser.add_argument('--nd', type=int, default=2, help='loop for discriminator')
-
+parser.add_argument('--lr', type=float, default=0.0002, help='loop for discriminator')
+parser.add_argument('--beta1', type=float, default=0.5, help='loop for discriminator')
 save_dir = 'save_samples'
 opt = parser.parse_args()
 
@@ -58,66 +60,75 @@ val_generator = data_utils.data_generator(val_data, train=False, opt=opt)
 ### ### ### ### ### ### ### ### 
 
 ### ! Setup Models ! ###
-# auto_encoder = autoencoder.Autoencoder(1)
-# auto_encoder.to(device)
-model = generator.generator().to(device)
-model.apply(weight_init.weight_init)
-print(model)
+netG = generator.Generator(1, 64, (3, 3, 3), 2, device).to(device)
+netG.apply(weight_init.weight_init)
+# print(netG)
+netD = discriminator.Discriminator().to(device)
+netD.apply(weight_init.weight_init)
 
 ### ### ### ### ### ### ### ### 
 
-### ! Setup Loss and Optimizer ! ###
-distance = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(),weight_decay=1e-5)
+## ! Setup Loss and Optimizer ! ###
+criterion = nn.MSELoss()
+optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 
-vis = visdom.Visdom()
-# win = viz.line(
-# X=np.column_stack([np.arange(0, 1) for i in range(10)]),
-# Y=np.column_stack([np.arange(0, 1) for i in range(10)]),
-# win="test"
-# )
-loss_window = vis.line(
-    X=np.column_stack([np.arange(0, 1) for i in range(1)]),
-    Y=np.column_stack([np.arange(0, 1) for i in range(1)]),
-    opts=dict(xlabel='epoch',ylabel='Loss',title='training loss',legend=['train loss', "val loss"]))
-# val_loss_window = vis.line(
-#     Y=torch.zeros((1)).cpu(),
-#     X=torch.zeros((1)).cpu(),
-#     opts=dict(xlabel='epoch',ylabel='Val_Loss',title='validation loss',legend=['Val Loss']))
+real_label = 1
+fake_label = 0
+# vis = visdom.Visdom()
+# loss_window = vis.line(
+#     X=np.column_stack([np.arange(0, 1) for i in range(1)]),
+#     Y=np.column_stack([np.arange(0, 1) for i in range(1)]),
+#     opts=dict(xlabel='epoch',ylabel='Loss',title='training loss',legend=['train loss', "val loss"]))
+
+D_losses = []
+G_losses = []
 
 for epoch in range(opt.n_epoches):
     for index, (data, ts) in enumerate(train_generator):
-        # print(data.size(), ts)
+#         # print(data.size(), ts)
         data = data.to(device)
-        output = model(data)
-        # print(output.size())
-        loss = distance(output, data)
-        # ===================backward====================
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='train loss')
-        # validation 
-        # if epoch % 9 == 0:
-        with torch.no_grad():
-            for i, (d, t) in enumerate(val_generator):
-                d = d.to(device)
-                model.eval()
-                val_out = model(d)
-                val_loss = distance(val_out, d)
-                print('epoch [{}/{}], val loss:{:.4f}'.format(epoch+1, opt.n_epoches, val_loss.data))
-                vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([val_loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='val loss')
-        # save data         
-        if epoch % 99 == 0:
-            for i, out in enumerate(output):
-                name = '%s/volume%03d_%03d_%03d.raw' % (save_dir, index+1, epoch+1, i + 1)
-                d = out.cpu().detach().numpy()
-                d = np.reshape(d, (64, 64, 64))
-                d.astype(np.float32)
-                d.tofile(name)
+        ## Train with all-real batch
+        netD.zero_grad()
+        label = torch.full((opt.batchSize, opt.seq_len), real_label, dtype=torch.float32, device=device)
+        # print("label size", label.size())
+        output = netD(data)
+        errD_real = criterion(output, label)
+        print(errD_real)
+        errD_real.backward()
 
-        # ===================log========================
-        print('epoch [{}/{}], loss:{:.4f}'.format(epoch+1, opt.n_epoches, loss.data))
+        # Train with all-fake batch 
+        fake = netG(data)
+        ## TODO: here fake is 2 generated images
+        print("fake", len(fake), fake[0].size())
+
+
+#         # ===================backward====================
+#         optimizer.zero_grad()
+#         loss.backward()
+#         optimizer.step()
+#         vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='train loss')
+#         # validation 
+#         # if epoch % 9 == 0:
+#         with torch.no_grad():
+#             for i, (d, t) in enumerate(val_generator):
+#                 d = d.to(device)
+#                 model.eval()
+#                 val_out = model(d)
+#                 val_loss = distance(val_out, d)
+#                 print('epoch [{}/{}], val loss:{:.4f}'.format(epoch+1, opt.n_epoches, val_loss.data))
+#                 vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([val_loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='val loss')
+#         # save data         
+#         if epoch % 99 == 0:
+#             for i, out in enumerate(output):
+#                 name = '%s/volume%03d_%03d_%03d.raw' % (save_dir, index+1, epoch+1, i + 1)
+#                 d = out.cpu().detach().numpy()
+#                 d = np.reshape(d, (64, 64, 64))
+#                 d.astype(np.float32)
+#                 d.tofile(name)
+
+#         # ===================log========================
+#         print('epoch [{}/{}], loss:{:.4f}'.format(epoch+1, opt.n_epoches, loss.data))
         
 
 

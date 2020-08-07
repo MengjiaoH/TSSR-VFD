@@ -43,7 +43,7 @@ class ChannelFlowDataset(Dataset):
 
         for num in range(num_seq):
             index = np.arange(num, num + self.seq_len)
-            seq = torch.zeros(self.seq_len, self.dims[0], self.dims[1], self.dims[2])
+            seq = torch.zeros(self.seq_len, 1, self.dims[0], self.dims[1], self.dims[2])
             timesteps = torch.zeros(self.seq_len)
             for i in index:
                 data_name = datas[i]

@@ -1,128 +1,110 @@
 import torch 
-import torch.nn as nn
-# from weight_init import weight_init
+import torch.nn as nn 
+from models import spatial_feature 
+from models import convLSTM
 
-class BasicBlock_Down(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1):
-        super(BasicBlock_Down, self).__init__()
-        self.expansion = 1
+
+class Generator(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, num_layers, device):
+        super(Generator, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
         self.kernel_size = kernel_size
-        self.padding = self.kernel_size // 2
-        self.main = nn.Sequential(
-            # nn.utils.spectral_norm(nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
-            nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
-            nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
-            nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False)),
-            nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False),
-            nn.Sigmoid()
-            # nn.BatchNorm3d(out_channels),
-        )
+        self.num_layers = num_layers
+        self.device = device
 
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_channels != self.expansion*out_channels:
-            self.shortcut = nn.Sequential(
-                # nn.utils.spectral_norm(nn.Conv3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, bias=False)),
-                nn.Conv3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, bias=False),
-                nn.BatchNorm3d(self.expansion*out_channels)
-            )
-    def forward(self, x):
-        re = self.main(x)
-        # print("re", re.size())
-        x = self.shortcut(x)
-        out = re + x 
-        # print("x", x.size())
-        return out
+        self.feature_learning = spatial_feature.Feature_Learning(self.device )
+        self.up_scaling = spatial_feature.Up_Scaling(self.device )
+        self.convlstm = convLSTM.ConvLSTM(64, 128, (3,3,3), 2)
+        self.generate_step = 2
+    
+    def blend(self, start, end, forward, backward):
+        weight0 = 0.5
+        weight1 = 0.5
+        v0 = weight0 * start + weight1 * end 
+        v_list = []
+        # print("first add size", v0.size())
+        for i in range(self.generate_step):
+            v1 = 0.5 * (forward[i] + backward[i])
+            # print("add size", v1.size())
+            v = v1 + v0
+            v_list.append(v)
+        return v_list
+
+        
+    def forward(self, input_tensor, hidden_state=None):
+        ## get x_start and x_end 
+        ## input_tensor (batch_size, seq_len, features, dim_x, dim_y, dim_z)
+        start = input_tensor[:, 0, :, :, :, :]
+        end   = input_tensor[:, -1, :, :, :, :]
+        ## for start and end feed into feature learning and convLSTM, then feed 
+        ## into Up scaling, the output from upscaling 
+        hidden_state_forward = None
+        hidden_state_backward = None
+
+        out_frames_forward = []
+        out_frames_backward = []
+
+        for i in range(self.generate_step):
+            # print("start size", start.size())
+            out_feature_forward = self.feature_learning(start)
+            # print("out feature size", out_feature_forward.size())
+            out_feature_forward = torch.reshape(out_feature_forward, (out_feature_forward.size()[0], 1, out_feature_forward.size()[1], out_feature_forward.size()[2], out_feature_forward.size()[3], out_feature_forward.size()[4]))
+        
+            out_lstm_forward, h_forward = self.convlstm(out_feature_forward, hidden_state_forward)
+            # print("out lstm size", len(out_lstm_forward), out_lstm_forward[1].size())
+            # print("cell state size", len(h_forward), h_forward[0][0].size(), h_forward[0][1].size())
+            # feed output into upscale 
+            out_lstm_forward = out_lstm_forward[1]
+            out_lstm_forward = torch.reshape(out_lstm_forward, (out_lstm_forward.size()[0], out_lstm_forward.size()[2], out_lstm_forward.size()[3], out_lstm_forward.size()[4], out_lstm_forward.size()[5]))
+            out_upscale_forward = self.up_scaling(out_lstm_forward) # this will be the next input for feature learning
+            # print("out upscale size", out_upscale_forward.size())
+            start = out_upscale_forward
+            hidden_state_forward = h_forward
+            out_frames_forward.append(out_upscale_forward)
+
+            # print("end size", end.size())
+            out_feature_backward = self.feature_learning(end)
+            # print("out feature size", out_feature_backward.size())
+            out_feature_backward = torch.reshape(out_feature_backward, (out_feature_backward.size()[0], 1, out_feature_backward.size()[1], out_feature_backward.size()[2], out_feature_backward.size()[3], out_feature_backward.size()[4]))
+        
+            out_lstm_backward, h_backward = self.convlstm(out_feature_backward, hidden_state_backward)
+            # print("out lstm size", len(out_lstm_backward), out_lstm_backward[1].size())
+            # print("cell state size", len(h_backward), h_backward[0][0].size(), h_backward[0][1].size())
+            # feed output into upscale 
+            out_lstm_backward = out_lstm_backward[1]
+            out_lstm_backward = torch.reshape(out_lstm_backward, (out_lstm_backward.size()[0], out_lstm_backward.size()[2], out_lstm_backward.size()[3], out_lstm_backward.size()[4], out_lstm_backward.size()[5]))
+            out_upscale_backward = self.up_scaling(out_lstm_backward) # this will be the next input for feature learning
+            # print("out upscale size", out_upscale_backward.size())
+            end = out_upscale_backward
+            hidden_state_backward = h_backward
+            out_frames_backward.append(out_upscale_backward)
+
+        # print("out frames forward size", len(out_frames_forward), out_frames_forward[1].size())
+        # print("out frames backward size", len(out_frames_backward), out_frames_backward[1].size())
+        # out_frames_forward = torch.stack(out_frames_forward)
+        # out_frames_backward = torch.stack(out_frames_backward)
+
+        # print("forward size", out_frames_forward.size())
+        # print("backward size", out_frames_backward.size())
+
+        v_list = self.blend(start, end, out_frames_forward, out_frames_backward)
+
+        return v_list
+        
+## initialize a list with start and end 
+## all intermidiate volumes are empty 
+# input_dim = 64
+# hidden_dim = 128
+# kernel_size = (3, 3, 3)
+# num_layers = 2
+# batch_size = 10
+# seq_len = 6
+
+# x = torch.rand(batch_size, seq_len, 1, 64, 64, 64)
 
 
-class BasicBlock_Up(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding = 1):
-        super(BasicBlock_Up, self).__init__()
-        self.expansion = 1
-        self.kernel_size = kernel_size
-        self.padding = padding
-        self.main_padding = self.kernel_size // 2
-        self.main = nn.Sequential(
-            # nn.utils.spectral_norm(nn.ConvTranspose3d(in_channels, out_channels, self.kernel_size, stride, self.padding, output_padding = 1, bias=False)),
-            nn.ConvTranspose3d(in_channels, out_channels, self.kernel_size, stride, self.padding, output_padding = 1, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.ConvTranspose3d(out_channels, out_channels, self.kernel_size, 1, self.main_padding, bias=False)),
-            nn.ConvTranspose3d(out_channels, out_channels, self.kernel_size, 1, self.main_padding, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.ConvTranspose3d(out_channels, out_channels, self.kernel_size, 1, self.main_padding, bias=False)),
-            nn.ConvTranspose3d(out_channels, out_channels, self.kernel_size, 1, self.main_padding, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.ConvTranspose3d(out_channels, out_channels, self.kernel_size, 1, self.main_padding, bias=False),
-            # nn.utils.spectral_norm(nn.ConvTranspose3d(out_channels, out_channels, self.kernel_size, 1, self.main_padding, bias=False)),
-            nn.Tanh()
-            # nn.BatchNorm3d(out_channels),
-        )
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_channels != self.expansion*out_channels:
-            self.shortcut = nn.Sequential(
-                # nn.utils.spectral_norm(nn.ConvTranspose3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, output_padding = 1, bias=False)),
-                nn.ConvTranspose3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, output_padding = 1, bias=False),
-                nn.BatchNorm3d(self.expansion*out_channels)
-            )
-
-    def forward(self, x):
-        re = self.main(x)
-        # print("re", re.size())
-        x = self.shortcut(x)
-        out = re + x 
-        # print("x", x.size())
-        return out
-
-class ResidualBlock_Down(nn.Module):
-    def __init__(self):
-        super(ResidualBlock_Down, self).__init__()
-        self.main = nn.Sequential(
-            BasicBlock_Down(1, 16, 5, 2),
-            BasicBlock_Down(16, 32, 3, 2),
-            BasicBlock_Down(32, 64, 3, 2),
-            BasicBlock_Down(64, 64, 3, 2),
-        )
-    def forward(self, x):
-        out = self.main(x)
-        return out
-
-class ResidualBlock_Up(nn.Module):
-    def __init__(self):
-        super(ResidualBlock_Up, self).__init__()
-        self.main = nn.Sequential(
-            BasicBlock_Up(64, 32, 3, 2, 1),
-            BasicBlock_Up(32, 16, 3, 2, 1),
-            BasicBlock_Up(16, 8, 3, 2, 1),
-            BasicBlock_Up(8, 1, 5, 2, 2),
-        )
-    def forward(self, x):
-        out = self.main(x)
-        return out
-
-class generator(nn.Module):
-    def __init__(self):
-        super(generator, self).__init__()  
-        self.down = ResidualBlock_Down()
-        self.up = ResidualBlock_Up()
-    def forward(self, x):
-        out = self.down(x)
-        out = self.up(out)
-        return out
-
-# block = generator()
-# x = torch.rand(5, 1, 64, 64)
-# print(block)   
-# y = block(x)
-# print("y", y.size())
+# model = Generator(1, 64, kernel_size, num_layers)
+# print(model)
+# out = model(x)
+# print("out size", len(out), out[0].size())

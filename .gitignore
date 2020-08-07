@@ -3,7 +3,9 @@ data/
 env/
 data_provider/__pycache__/
 tssr-env/
-models/__pycache__
+models/__pycache__/
 save_samples/
+models/__pycache__/convLSTM.cpython-37.pyc
+
 
 
