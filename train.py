@@ -37,6 +37,7 @@ parser.add_argument('--ng', type=int, default=1, help='loop for generator')
 parser.add_argument('--nd', type=int, default=2, help='loop for discriminator')
 parser.add_argument('--lr', type=float, default=0.0002, help='loop for discriminator')
 parser.add_argument('--beta1', type=float, default=0.5, help='loop for discriminator')
+
 save_dir = 'save_samples'
 opt = parser.parse_args()
 
@@ -75,24 +76,31 @@ optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 
 real_label = 1
 fake_label = 0
-# vis = visdom.Visdom()
-# loss_window = vis.line(
-#     X=np.column_stack([np.arange(0, 1) for i in range(1)]),
-#     Y=np.column_stack([np.arange(0, 1) for i in range(1)]),
-#     opts=dict(xlabel='epoch',ylabel='Loss',title='training loss',legend=['train loss', "val loss"]))
+vis = visdom.Visdom()
+loss_window = vis.line(
+    X=np.column_stack([np.arange(0, 1) for i in range(1)]),
+    Y=np.column_stack([np.arange(0, 1) for i in range(1)]),
+    opts=dict(xlabel='epoch',ylabel='Loss',title='training loss',legend=['G loss', "D loss"]))
 
 D_losses = []
 G_losses = []
 
 for epoch in range(opt.n_epoches):
     for index, (data, ts) in enumerate(train_generator):
-#         # print(data.size(), ts)
-        data = data.to(device)
+        # print(data.size(), ts)
+        # data: batch_size, seq_len, 1, dim_x, dim_y, dim_z
+        # get frames in between
+        subset = data[:, 1:2, :, :, :, :]
+        subset = subset.to(device)
+
+        ############################
+        # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+        ###########################
         ## Train with all-real batch
         netD.zero_grad()
-        label = torch.full((opt.batchSize, opt.seq_len), real_label, dtype=torch.float32, device=device)
+        label = torch.full((opt.batchSize, opt.seq_len - 2), real_label, dtype=torch.float32, device=device)
         # print("label size", label.size())
-        output = netD(data)
+        output = netD(subset)
         errD_real = criterion(output, label)
         print(errD_real)
         errD_real.backward()
@@ -101,7 +109,30 @@ for epoch in range(opt.n_epoches):
         fake = netG(data)
         ## TODO: here fake is 2 generated images
         print("fake", len(fake), fake[0].size())
+        label.fill_(fake_label)
+        output = netD(fake.detach())
+        errD_fake = criterion(output, label)
+        errD_fake.backward()
+        errD = errD_real + errD_fake
+        optimizerD.step()
 
+        ############################
+        # (2) Update G network: maximize log(D(G(z)))
+        ###########################
+        netG.zero_grad()
+        label.fill_(real_label)
+        output = netD(fake)
+        errG = criterion(output, label)
+        errG.backward()
+        optimizerG.step()
+
+        G_losses.append(errG.item())
+        D_losses.append(errD.item())
+
+        vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errD]).unsqueeze(0).cpu(),win=loss_window,update='append', name='D loss')
+        vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errG]).unsqueeze(0).cpu(),win=loss_window,update='append', name='G loss')
+
+        print('epoch [{}/{}], G loss:{:.4f}, D loss:{:.4f}'.format(epoch+1, opt.n_epoches, errG.data, errD.data))
 
 #         # ===================backward====================
 #         optimizer.zero_grad()
@@ -128,7 +159,7 @@ for epoch in range(opt.n_epoches):
 #                 d.tofile(name)
 
 #         # ===================log========================
-#         print('epoch [{}/{}], loss:{:.4f}'.format(epoch+1, opt.n_epoches, loss.data))
+
         
 
 
