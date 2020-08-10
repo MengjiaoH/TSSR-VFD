@@ -18,16 +18,14 @@ class Generator(nn.Module):
         self.convlstm = convLSTM.ConvLSTM(64, 128, (3,3,3), 2)
         self.generate_step = 2
     
-    def blend(self, start, end, forward, backward):
-        weight0 = 0.5
-        weight1 = 0.5
-        v0 = weight0 * start + weight1 * end 
+    def blend(self, start, end, forward, backward, weights):
         # print("start size", start.size())
         b_size = start.size()[0]
         dim_x = start.size()[2]
         v_list = torch.zeros(self.generate_step, b_size, 1, dim_x, dim_x, dim_x).to(self.device)
         # print("first add size", v0.size())
         for i in range(self.generate_step):
+            v0 = weights[i][0] * start + weights[i][1] * end 
             v1 = 0.5 * (forward[i] + backward[i])
             v = v1 + v0
             v_list[i] = v
@@ -90,8 +88,8 @@ class Generator(nn.Module):
 
         # print("forward size", out_frames_forward.size())
         # print("backward size", out_frames_backward.size())
-
-        v_list = self.blend(start, end, out_frames_forward, out_frames_backward)
+        weights = [[0.8, 0.2], [0.2, 0.8]]
+        v_list = self.blend(start, end, out_frames_forward, out_frames_backward, weights)
 
         return v_list
         

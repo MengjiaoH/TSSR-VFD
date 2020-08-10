@@ -36,7 +36,7 @@ parser.add_argument('--batchSize', type=int, default=10, help='batch size')
 parser.add_argument('--ng', type=int, default=1, help='loop for generator')
 parser.add_argument('--nd', type=int, default=2, help='loop for discriminator')
 parser.add_argument('--lr', type=float, default=0.0002, help='loop for discriminator')
-parser.add_argument('--beta1', type=float, default=0.0, help='loop for discriminator')
+parser.add_argument('--beta1', type=float, default=0.5, help='loop for discriminator')
 
 save_dir = 'save_samples'
 opt = parser.parse_args()
@@ -101,64 +101,63 @@ for epoch in range(opt.n_epoches):
         start_end = start_end.to(device)
         inter_seq = inter_seq.to(device)
 
-        # # for i in range(opt.nd):
-        ############################
-        # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
-        ###########################
-        ## Train with all-real batch
-        netD.zero_grad()
-        label = torch.full((opt.batchSize, opt.seq_len - 2), real_label, dtype=torch.float32, device=device)
-        # label = torch.reshape(label, (opt.batchSize * (opt.seq_len - 2), ))
-        # print("read label", label)
-        output, _ = netD(inter_seq)
-        # feature_maps_real = feature_maps_real.detach()
-        # print("real output", output)
-        errD_real = criterion(output, label)
-        errD_real.backward()
+        for i in range(opt.nd):
+            ############################
+            # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+            ###########################
+            ## Train with all-real batch
+            netD.zero_grad()
+            label = torch.full((opt.batchSize, opt.seq_len - 2), real_label, dtype=torch.float32, device=device)
+            # label = torch.reshape(label, (opt.batchSize * (opt.seq_len - 2), ))
+            # print("read label", label)
+            output, _ = netD(inter_seq)
+            # feature_maps_real = feature_maps_real.detach()
+            # print("real output", output)
+            errD_real = criterion(output, label)
+            errD_real.backward()
 
-        # Train with all-fake batch 
-        fake = netG(start_end).permute(1, 0, 2, 3, 4, 5)
-        # print("fake", fake.size())
-        label.fill_(fake_label)
-        output, _ = netD(fake.detach())
-        # print("output size", output.size(), label.size())
-        errD_fake = criterion(output, label)
-        errD_fake.backward()
-        errD = (errD_real + errD_fake) / 2
-        # print("errD", errD_real.data, errD_fake.data)
-        optimizerD.step()
-        D_losses.append(errD.item())
-        # vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errD]).unsqueeze(0).cpu(),win=loss_window,update='append', name='D loss')
+            # Train with all-fake batch 
+            fake = netG(start_end).permute(1, 0, 2, 3, 4, 5)
+            # print("fake", fake.size())
+            label.fill_(fake_label)
+            output, _ = netD(fake.detach())
+            # print("output size", output.size(), label.size())
+            errD_fake = criterion(output, label)
+            errD_fake.backward()
+            errD = (errD_real + errD_fake) / 2
+            # print("errD", errD_real.data, errD_fake.data)
+            optimizerD.step()
+            D_losses.append(errD.item())
+            # vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errD]).unsqueeze(0).cpu(),win=loss_window,update='append', name='D loss')
 
-        # for j in range(opt.ng):
+        for j in range(opt.ng):
 
-        ############################
-        # (2) Update G network: maximize log(D(G(z)))
-        ###########################
-        with torch.autograd.set_detect_anomaly(True):
-            netG.zero_grad()
-            label.fill_(real_label)
-            output, feature_maps_generated = netD(fake)
-            _, feature_maps_real = netD(inter_seq)
-            # output = torch.reshape(output, ((opt.batchSize * (opt.seq_len - 2), )))
-            errG_1 = lossG(output, label)
-            errG_2 = lossG(fake, inter_seq)
-            errG_3 = 0
-            # errG_3 = lossG(feature_maps_generated, feature_maps_real)
-            for f, feature_map_genearated in enumerate(feature_maps_generated):
-                for ff, fm_genearated in enumerate(feature_map_genearated):
-            #         print(fm_genearated.size())
-            #         print(feature_maps_real[f][ff].size())
-                    err = lossG(fm_genearated, feature_maps_real[f][ff])
-                    errG_3 = err + errG_3
+            ############################
+            # (2) Update G network: maximize log(D(G(z)))
+            ###########################
+            with torch.autograd.set_detect_anomaly(True):
+                netG.zero_grad()
+                label.fill_(real_label)
+                output, feature_maps_generated = netD(fake)
+                _, feature_maps_real = netD(inter_seq)
+                # output = torch.reshape(output, ((opt.batchSize * (opt.seq_len - 2), )))
+                errG_1 = lossG(output, label)
+                errG_2 = lossG(fake, inter_seq)
+                errG_3 = 0
+                # errG_3 = lossG(feature_maps_generated, feature_maps_real)
+                for f, feature_map_genearated in enumerate(feature_maps_generated):
+                    for ff, fm_genearated in enumerate(feature_map_genearated):
+                #         print(fm_genearated.size())
+                #         print(feature_maps_real[f][ff].size())
+                        err = lossG(fm_genearated, feature_maps_real[f][ff])
+                        errG_3 = err + errG_3
 
-            errG = 0.001 * errG_1 + errG_2  + errG_3 * 0.05
-            errG.backward()
-            optimizerG.step()
+                errG = 0.001 * errG_1 + errG_2  + errG_3 * 0.05
+                errG.backward()
+                optimizerG.step()
 
-            G_losses.append(errG.item())
-
-        # vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errG]).unsqueeze(0).cpu(),win=loss_window,update='append', name='G loss')
+                G_losses.append(errG.item())
+                # vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errG]).unsqueeze(0).cpu(),win=loss_window,update='append', name='G loss')
         
         print('epoch [{}/{}], G loss:{:.4f}, D loss:{:.4f}'.format(epoch+1, opt.n_epoches, errG.data, errD.data))
 
