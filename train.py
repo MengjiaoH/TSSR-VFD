@@ -38,6 +38,7 @@ parser.add_argument('--nd', type=int, default=2, help='loop for discriminator')
 parser.add_argument('--lr', type=float, default=0.0002, help='loop for discriminator')
 parser.add_argument('--beta1', type=float, default=0.5, help='loop for discriminator')
 
+ngpu = 2
 save_dir = 'save_samples'
 opt = parser.parse_args()
 
@@ -47,7 +48,7 @@ print("Random Seed: ", opt.manualSeed)
 random.seed(opt.manualSeed)
 torch.manual_seed(opt.manualSeed)
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
 print("device", device)
 
 ### ### ### ### ### ### ### ### 
@@ -62,9 +63,15 @@ val_generator = data_utils.data_generator(val_data, train=False, opt=opt)
 
 ### ! Setup Models ! ###
 netG = generator.Generator(1, 64, (3, 3, 3), 2, device).to(device)
+
+if(device.type == 'cuda' and (ngpu > 1)):
+    netG = nn.DataParallel(netG, list(range(ngpu)))
+
 netG.apply(weight_init.weight_init)
-# print(netG)
+
 netD = discriminator.Discriminator().to(device)
+if(device.type == 'cuda' and (ngpu > 1)):
+    netD = nn.DataParallel(netD, list(range(ngpu)))
 netD.apply(weight_init.weight_init)
 
 ### ### ### ### ### ### ### ### 
@@ -182,6 +189,8 @@ for epoch in range(opt.n_epoches):
                     d.tofile(name)
 
 #         # ===================log========================
+
+# Draw loss 
 
         
 
