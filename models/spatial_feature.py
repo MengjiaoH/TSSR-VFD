@@ -12,30 +12,32 @@ class BasicBlock(nn.Module):
         self.device = device 
 
         self.main = nn.Sequential(
-            # nn.utils.spectral_norm(nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
-            nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
-            nn.BatchNorm3d(out_channels),
+            nn.utils.spectral_norm(nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
+            # nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
+            # nn.BatchNorm3d(out_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
-            nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
-            nn.BatchNorm3d(out_channels),
+            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
+            # nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
+            # nn.BatchNorm3d(out_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
-            nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
-            nn.BatchNorm3d(out_channels),
+            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False)),
+            # nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
+            # nn.BatchNorm3d(out_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            # nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False)),
-            nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False),
-            nn.Sigmoid()
+            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False)),
+            nn.LeakyReLU(0.2, inplace=True),
+            # nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False),
+            # nn.Sigmoid()
             # nn.BatchNorm3d(out_channels),
         )
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_channels != self.expansion*out_channels:
             self.shortcut = nn.Sequential(
-                # nn.utils.spectral_norm(nn.Conv3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, bias=False)),
-                nn.Conv3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, bias=False),
-                nn.BatchNorm3d(self.expansion*out_channels)
+                nn.utils.spectral_norm(nn.Conv3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, bias=False)),
+                nn.LeakyReLU(0.2, inplace=True),
+                # nn.Conv3d(in_channels, self.expansion*out_channels, self.kernel_size, stride, self.padding, bias=False),
+                # nn.BatchNorm3d(self.expansion*out_channels)
             )
 
     def voxel_shuffle(self, x, factor=2):
@@ -59,7 +61,8 @@ class BasicBlock(nn.Module):
             xx = torch.split(xx, 1, 1)
             xx = torch.cat([torch.squeeze(xxx, axis=1) for xxx in xx], 3)
             x_factor[:, :, :, :, index] = xx
-        x_factor = x_factor.permute(0, 4, 1, 2, 3)
+        # print("x factor size", x_factor.size())
+        x_factor = x_factor.permute(0, 4, 1, 2, 3).contiguous()
         return x_factor
 
     def forward(self, x):
@@ -114,6 +117,7 @@ class Up_Scaling(nn.Module):
             BasicBlock(64, 32*8, 3, self.device, 1, True),
             BasicBlock(32, 16*8, 3, self.device, 1, True),
             BasicBlock(16, 1*8, 5, self.device, 1, True),
+            nn.Tanh()
         )
 
     def forward(self, x):

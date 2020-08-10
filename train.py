@@ -31,12 +31,12 @@ parser.add_argument('--workers', type=int, default=1, help='number of data loadi
 parser.add_argument('--dataDims', type=int, default=64, help='dimension of data')
 parser.add_argument('--fields', type=int, default=1, help='number fields of dataset')
 parser.add_argument('--seq_len', type=int, default=4, help='max sequence length')
-parser.add_argument('--n_epoches', type=int, default=10, help='number of epoches')
-parser.add_argument('--batchSize', type=int, default=5, help='batch size')
+parser.add_argument('--n_epoches', type=int, default=100, help='number of epoches')
+parser.add_argument('--batchSize', type=int, default=10, help='batch size')
 parser.add_argument('--ng', type=int, default=1, help='loop for generator')
 parser.add_argument('--nd', type=int, default=2, help='loop for discriminator')
 parser.add_argument('--lr', type=float, default=0.0002, help='loop for discriminator')
-parser.add_argument('--beta1', type=float, default=0.5, help='loop for discriminator')
+parser.add_argument('--beta1', type=float, default=0.0, help='loop for discriminator')
 
 save_dir = 'save_samples'
 opt = parser.parse_args()
@@ -70,75 +70,98 @@ netD.apply(weight_init.weight_init)
 ### ### ### ### ### ### ### ### 
 
 ## ! Setup Loss and Optimizer ! ###
+# def loss_fn(outputs, )
 criterion = nn.MSELoss()
-optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+# x = D(G(V)) y = 1
+# x = G(V) y = V
+lossG = nn.MSELoss() 
+# BCELoss()
+# MSELoss()
+optimizerG = optim.Adam(netG.parameters(), lr=0.0001, betas=(opt.beta1, 0.999))
+optimizerD = optim.Adam(netD.parameters(), lr=0.0004, betas=(opt.beta1, 0.999))
 
 real_label = 1
 fake_label = 0
-vis = visdom.Visdom()
-loss_window = vis.line(
-    X=np.column_stack([np.arange(0, 1) for i in range(1)]),
-    Y=np.column_stack([np.arange(0, 1) for i in range(1)]),
-    opts=dict(xlabel='epoch',ylabel='Loss',title='training loss',legend=['G loss', "D loss"]))
+# vis = visdom.Visdom()
+# loss_window = vis.line(
+#     X=np.column_stack([np.arange(0, 1) for i in range(1)]),
+#     Y=np.column_stack([np.arange(0, 1) for i in range(1)]),
+#     opts=dict(xlabel='epoch',ylabel='Loss',title='training loss',legend=['G loss', "D loss"]))
 
 D_losses = []
 G_losses = []
 
 for epoch in range(opt.n_epoches):
-    for index, (data, ts) in enumerate(train_generator):
-        # print(data.size(), ts)
+    for index, (start_end, inter_seq, ts) in enumerate(train_generator):
         # data: batch_size, seq_len, 1, dim_x, dim_y, dim_z
         # get frames in between
-        subset = data[:, 1:2, :, :, :, :]
-        subset = subset.to(device)
+        # print("start-end size", start_end.size())
+        # print("subset size", inter_seq.size())
+        # print(start_end[0][0][0][0][32])
+        start_end = start_end.to(device)
+        inter_seq = inter_seq.to(device)
 
+        # # for i in range(opt.nd):
         ############################
         # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
         ###########################
         ## Train with all-real batch
         netD.zero_grad()
         label = torch.full((opt.batchSize, opt.seq_len - 2), real_label, dtype=torch.float32, device=device)
-        # print("label size", label.size())
-        output = netD(subset)
+        # label = torch.reshape(label, (opt.batchSize * (opt.seq_len - 2), ))
+        # print("read label", label)
+        output, _ = netD(inter_seq)
+        # feature_maps_real = feature_maps_real.detach()
+        # print("real output", output)
         errD_real = criterion(output, label)
-        print(errD_real)
         errD_real.backward()
 
         # Train with all-fake batch 
-        fake = netG(data)
-        ## TODO: here fake is 2 generated images
-        print("fake", len(fake), fake[0].size())
+        fake = netG(start_end).permute(1, 0, 2, 3, 4, 5)
+        # print("fake", fake.size())
         label.fill_(fake_label)
-        output = netD(fake.detach())
+        output, _ = netD(fake.detach())
+        # print("output size", output.size(), label.size())
         errD_fake = criterion(output, label)
         errD_fake.backward()
-        errD = errD_real + errD_fake
+        errD = (errD_real + errD_fake) / 2
+        # print("errD", errD_real.data, errD_fake.data)
         optimizerD.step()
+        D_losses.append(errD.item())
+        # vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errD]).unsqueeze(0).cpu(),win=loss_window,update='append', name='D loss')
+
+        # for j in range(opt.ng):
 
         ############################
         # (2) Update G network: maximize log(D(G(z)))
         ###########################
-        netG.zero_grad()
-        label.fill_(real_label)
-        output = netD(fake)
-        errG = criterion(output, label)
-        errG.backward()
-        optimizerG.step()
+        with torch.autograd.set_detect_anomaly(True):
+            netG.zero_grad()
+            label.fill_(real_label)
+            output, feature_maps_generated = netD(fake)
+            _, feature_maps_real = netD(inter_seq)
+            # output = torch.reshape(output, ((opt.batchSize * (opt.seq_len - 2), )))
+            errG_1 = lossG(output, label)
+            errG_2 = lossG(fake, inter_seq)
+            errG_3 = 0
+            # errG_3 = lossG(feature_maps_generated, feature_maps_real)
+            for f, feature_map_genearated in enumerate(feature_maps_generated):
+                for ff, fm_genearated in enumerate(feature_map_genearated):
+            #         print(fm_genearated.size())
+            #         print(feature_maps_real[f][ff].size())
+                    err = lossG(fm_genearated, feature_maps_real[f][ff])
+                    errG_3 = err + errG_3
 
-        G_losses.append(errG.item())
-        D_losses.append(errD.item())
+            errG = 0.001 * errG_1 + errG_2  + errG_3 * 0.05
+            errG.backward()
+            optimizerG.step()
 
-        vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errD]).unsqueeze(0).cpu(),win=loss_window,update='append', name='D loss')
-        vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errG]).unsqueeze(0).cpu(),win=loss_window,update='append', name='G loss')
+            G_losses.append(errG.item())
 
+        # vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errG]).unsqueeze(0).cpu(),win=loss_window,update='append', name='G loss')
+        
         print('epoch [{}/{}], G loss:{:.4f}, D loss:{:.4f}'.format(epoch+1, opt.n_epoches, errG.data, errD.data))
 
-#         # ===================backward====================
-#         optimizer.zero_grad()
-#         loss.backward()
-#         optimizer.step()
-#         vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='train loss')
 #         # validation 
 #         # if epoch % 9 == 0:
 #         with torch.no_grad():
@@ -149,14 +172,15 @@ for epoch in range(opt.n_epoches):
 #                 val_loss = distance(val_out, d)
 #                 print('epoch [{}/{}], val loss:{:.4f}'.format(epoch+1, opt.n_epoches, val_loss.data))
 #                 vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([val_loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='val loss')
-#         # save data         
-#         if epoch % 99 == 0:
-#             for i, out in enumerate(output):
-#                 name = '%s/volume%03d_%03d_%03d.raw' % (save_dir, index+1, epoch+1, i + 1)
-#                 d = out.cpu().detach().numpy()
-#                 d = np.reshape(d, (64, 64, 64))
-#                 d.astype(np.float32)
-#                 d.tofile(name)
+        # save data         
+        if epoch % 10 == 0:
+            for i, out in enumerate(fake):
+                for ii, o in enumerate(out):
+                    name = '%s/volume%03d_%03d_%03d_%02d.raw' % (save_dir, index+1, epoch+1, i + 1, ii)
+                    d = o.cpu().detach().numpy()
+                    d = np.reshape(d, (64, 64, 64))
+                    d.astype(np.float32)
+                    d.tofile(name)
 
 #         # ===================log========================
 

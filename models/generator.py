@@ -22,13 +22,16 @@ class Generator(nn.Module):
         weight0 = 0.5
         weight1 = 0.5
         v0 = weight0 * start + weight1 * end 
-        v_list = []
+        # print("start size", start.size())
+        b_size = start.size()[0]
+        dim_x = start.size()[2]
+        v_list = torch.zeros(self.generate_step, b_size, 1, dim_x, dim_x, dim_x).to(self.device)
         # print("first add size", v0.size())
         for i in range(self.generate_step):
             v1 = 0.5 * (forward[i] + backward[i])
-            # print("add size", v1.size())
             v = v1 + v0
-            v_list.append(v)
+            v_list[i] = v
+            # print("add size", v1.size())
         return v_list
 
         

@@ -43,19 +43,26 @@ class ChannelFlowDataset(Dataset):
 
         for num in range(num_seq):
             index = np.arange(num, num + self.seq_len)
-            seq = torch.zeros(self.seq_len, 1, self.dims[0], self.dims[1], self.dims[2])
+            start_end = torch.zeros(self.seq_len-2, 1, self.dims[0], self.dims[1], self.dims[2])
+            inter_seq = torch.zeros(self.seq_len-2, 1, self.dims[0], self.dims[1], self.dims[2])
             timesteps = torch.zeros(self.seq_len)
-            for i in index:
+            for ii, i in enumerate(index):
                 data_name = datas[i]
                 data_path = os.path.join(self.root, data_name)
                 data = np.fromfile(data_path, dtype='float32')
                 data = np.reshape(data, self.dims)
                 timesteps[i-num] = torch.tensor(int(data_name[6:9]))
                 T_data = torch.tensor(data)
-                seq[i-num] = T_data
+                if (i-num) == 0:
+                    start_end[0] = T_data
+                elif (i-num) == self.seq_len -1:
+                    start_end[1] = T_data
+                else:
+                    inter_seq[i-num-1] = T_data
         
             self.data.append({
-                "seq" : seq,
+                "start_end" : start_end,
+                "inter_seq" : inter_seq,
                 "ts": timesteps,
             })
 
@@ -76,10 +83,11 @@ class ChannelFlowDataset(Dataset):
         self.set_seed(index)
         # print("index", index)
         data = self.data[index]
-        seq = data["seq"]
+        start_end = data["start_end"]
+        inter_seq = data["inter_seq"]
         ts = data["ts"]
-
-        return (seq, ts)
+        # print("seq.size", seq.size())
+        return (start_end, inter_seq, ts)
 
     def __len__(self):
         # print(len(self.data))

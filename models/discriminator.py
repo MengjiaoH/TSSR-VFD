@@ -7,17 +7,39 @@ class Discriminator(nn.Module):
         self.kernel_size = 4
         self.stride = 2 
         self.padding = 1
-        self.main = nn.Sequential(
-            nn.Conv3d(1, 64, self.kernel_size, self.stride, self.padding, bias=True),
-            nn.BatchNorm3d(64),
-            nn.Conv3d(64, 128, self.kernel_size, self.stride, self.padding, bias=True),
-            nn.BatchNorm3d(128),
-            nn.Conv3d(128, 256, self.kernel_size, self.stride, self.padding, bias=True),
-            nn.BatchNorm3d(256),
-            nn.Conv3d(256, 512, self.kernel_size, self.stride, self.padding, bias=True),
-            nn.BatchNorm3d(512),
-            nn.Conv3d(512, 1, self.kernel_size, self.stride, 0, bias=True),
-        )
+        self.conv1 = nn.Conv3d(1, 64, self.kernel_size, self.stride, self.padding, bias=True)
+        self.sn1 = nn.utils.spectral_norm(self.conv1)
+        self.relu1 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv2 = nn.Conv3d(64, 128, self.kernel_size, self.stride, self.padding, bias=True)
+        self.sn2 = nn.utils.spectral_norm(self.conv2)
+        self.relu2 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv3 = nn.Conv3d(128, 256, self.kernel_size, self.stride, self.padding, bias=True)
+        self.sn3 = nn.utils.spectral_norm(self.conv3)
+        self.relu3 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv4 = nn.Conv3d(256, 512, self.kernel_size, self.stride, self.padding, bias=True)
+        self.sn4 = nn.utils.spectral_norm(self.conv4)
+        self.relu4 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv5 = nn.Conv3d(512, 1, self.kernel_size, self.stride, 0, bias=True)
+        self.sn5 = nn.utils.spectral_norm(self.conv5)
+        self.relu5 = nn.LeakyReLU(0.2, inplace=True)
+
+        # self.main = nn.Sequential(
+        #     nn.utils.spectral_norm(nn.Conv3d(1, 64, self.kernel_size, self.stride, self.padding, bias=True)),
+        #     # nn.BatchNorm3d(64),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.utils.spectral_norm(nn.Conv3d(64, 128, self.kernel_size, self.stride, self.padding, bias=True)),
+        #     # nn.BatchNorm3d(128),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.utils.spectral_norm(nn.Conv3d(128, 256, self.kernel_size, self.stride, self.padding, bias=True)),
+        #     # nn.BatchNorm3d(256),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.utils.spectral_norm(nn.Conv3d(256, 512, self.kernel_size, self.stride, self.padding, bias=True)),
+        #     # nn.BatchNorm3d(512),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.utils.spectral_norm(nn.Conv3d(512, 1, self.kernel_size, self.stride, 0, bias=True)),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Sigmoid()
+        # )
 
     
     def forward(self, input):
@@ -26,18 +48,45 @@ class Discriminator(nn.Module):
         output = []
         seq_len = input.size()[0]
         batch_size = input.size()[1]
+        feature_maps = []
         for i in range(seq_len):
             # print("one tensor", input[i].size())
-            out = self.main(input[i])
+            feature_map = []
+            # first layer 
+            # print("out1 size", out1.size())
+            out1 = self.sn1(input[i])
+            feature_map.append(out1)
+            out1 = self.relu1(out1)
+
+            out2 = self.sn2(out1)
+            feature_map.append(out2)
+            out2 = self.relu2(out2)
+
+            out3 = self.sn3(out2)
+            feature_map.append(out3)
+            out3 = self.relu3(out3)
+
+            out4 = self.sn4(out3)
+            feature_map.append(out4)
+            out4 = self.relu4(out4)
+
+            out = self.sn5(out4)
+            feature_map.append(out)
+            out = self.relu5(out)
+
+            # out = nn.Sigmoid(out)
             out = torch.reshape(out, (batch_size, 1))
             output.append(out)
+            # print("feature map", len(feature_map), feature_map[0].size())
+            feature_maps.append(feature_map)
         output = torch.stack(output)
         output = torch.reshape(output, (seq_len, batch_size))
         output = output.permute(1, 0)
-        print( output.size())
-        return output
+        # print("feature maps size", feature_maps.size())
+        # print( output.size())
+        return output, feature_maps
 
 
-# x = torch.rand(10, 1, 64, 64, 64)
-# model = Discriminator(1, 1, 4, 2)
-# y = model(x)
+x = torch.rand(10, 2, 1, 64, 64, 64)
+model = Discriminator()
+y = model(x)

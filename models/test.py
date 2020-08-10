@@ -1,8 +1,9 @@
 import torch 
+import torch.nn as nn
 
-x = torch.zeros(2, 2)
-y = torch.ones(1, 2)
-z = x + y
-print(x)
-print(y)
-print(z)
+loss = nn.MSELoss(reduction='none')
+input = torch.ones(3, 5, requires_grad=True)
+target = torch.zeros(3, 5)
+output = loss(input, target)
+output.backward()
+print("output:", output)
