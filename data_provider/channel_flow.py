@@ -19,7 +19,7 @@ class ChannelFlowDataset(Dataset):
         self.data = []
 
         data_dir = os.path.join(self.root)
-        datas = [d for d in os.listdir(data_dir)]
+        datas = [d for d in os.listdir(data_dir) if (d.endswith('raw'))]
         datas = sorted(datas)
         
         num_train = len(datas) * 10 // 10
@@ -50,8 +50,9 @@ class ChannelFlowDataset(Dataset):
                 data_name = datas[i]
                 data_path = os.path.join(self.root, data_name)
                 data = np.fromfile(data_path, dtype='float32')
+                # print("data", data_name, num, ii)
                 data = np.reshape(data, self.dims)
-                timesteps[i-num] = torch.tensor(int(data_name[6:9]))
+                timesteps[i-num] = torch.tensor(int(num+ii+1))
                 T_data = torch.tensor(data)
                 if (i-num) == 0:
                     start_end[0] = T_data

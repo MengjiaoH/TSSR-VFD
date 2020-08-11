@@ -13,8 +13,8 @@ class Generator(nn.Module):
         self.num_layers = num_layers
         self.device = device
 
-        self.feature_learning = spatial_feature.Feature_Learning(self.device )
-        self.up_scaling = spatial_feature.Up_Scaling(self.device )
+        self.feature_learning = spatial_feature.Feature_Learning(self.device)
+        self.up_scaling = spatial_feature.Up_Scaling(self.device)
         self.convlstm = convLSTM.ConvLSTM(64, 128, (3,3,3), 2)
         self.generate_step = 2
     

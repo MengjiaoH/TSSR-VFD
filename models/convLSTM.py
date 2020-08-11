@@ -140,10 +140,11 @@ class ConvLSTM(nn.Module):
         # if hidden_state is not None:
         #     # raise NotImplementedError()
         # else:
+        # TODO: change volume size to 4 when dims is 64
         if hidden_state is None:
             # Since the init is done in forward. Can send image size here
             hidden_state = self._init_hidden(batch_size=b,
-                                             volume_size=(4, 4, 4))
+                                             volume_size=(2, 2, 2))
 
         layer_output_list = []
         last_state_list = []

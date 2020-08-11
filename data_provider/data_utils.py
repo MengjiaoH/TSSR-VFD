@@ -8,19 +8,22 @@ def load_dataset(opt):
 
         train_data = ChannelFlowDataset(
             mode = 'train',
-            data_root=opt.dataroot, 
+            data_root=opt.dataroot,
+            dims=(opt.dataDims, opt.dataDims, opt.dataDims), 
             opt=opt
         )
 
         val_data = ChannelFlowDataset(
             mode = 'val',
             data_root=opt.dataroot, 
+            dims=(opt.dataDims, opt.dataDims, opt.dataDims), 
             opt=opt
         )
 
         test_data = ChannelFlowDataset(
             mode = 'test',
             data_root=opt.dataroot, 
+            dims=(opt.dataDims, opt.dataDims, opt.dataDims), 
             opt=opt
         )
     elif opt.dataset == 'single_volume':

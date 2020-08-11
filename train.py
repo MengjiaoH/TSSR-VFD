@@ -23,22 +23,22 @@ os.environ['CUDA_VISIBLE_DEVICES']='0'
 
 ### ! Parse Arguments ! ### 
 parser = argparse.ArgumentParser()
+parser.add_argument('--ngpu', type=int, default=1, help='number of gpus that used for training')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--manualSeed', type=int, default=1, help='manual seed')
 parser.add_argument('--dataset', default='channel_flow', help='channel_flow')
-parser.add_argument('--dataroot', default='data/low_resolution', help='path to dataset')
+parser.add_argument('--dataroot', default='data/volume32x32x32/data/', help='path to dataset')
 parser.add_argument('--workers', type=int, default=1, help='number of data loading workers')
-parser.add_argument('--dataDims', type=int, default=64, help='dimension of data')
+parser.add_argument('--dataDims', type=int, default=32, help='dimension of data')
 parser.add_argument('--fields', type=int, default=1, help='number fields of dataset')
 parser.add_argument('--seq_len', type=int, default=4, help='max sequence length')
-parser.add_argument('--n_epoches', type=int, default=100, help='number of epoches')
-parser.add_argument('--batchSize', type=int, default=10, help='batch size')
+parser.add_argument('--n_epoches', type=int, default=200, help='number of epoches')
+parser.add_argument('--batchSize', type=int, default=5, help='batch size')
 parser.add_argument('--ng', type=int, default=1, help='loop for generator')
 parser.add_argument('--nd', type=int, default=2, help='loop for discriminator')
 parser.add_argument('--lr', type=float, default=0.0002, help='loop for discriminator')
-parser.add_argument('--beta1', type=float, default=0.5, help='loop for discriminator')
+parser.add_argument('--beta1', type=float, default=0.0, help='loop for discriminator')
 
-ngpu = 2
 save_dir = 'save_samples'
 opt = parser.parse_args()
 
@@ -48,7 +48,7 @@ print("Random Seed: ", opt.manualSeed)
 random.seed(opt.manualSeed)
 torch.manual_seed(opt.manualSeed)
 
-device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
+device = torch.device("cuda:0" if (torch.cuda.is_available() and opt.ngpu > 0) else "cpu")
 print("device", device)
 
 ### ### ### ### ### ### ### ### 
@@ -56,7 +56,7 @@ print("device", device)
 ### ! Setup Dataset ! ###
 train_data, val_data, test_data = data_utils.load_dataset(opt)
 train_generator = data_utils.data_generator(train_data, train=True, opt=opt)
-val_generator = data_utils.data_generator(val_data, train=False, opt=opt)
+# val_generator = data_utils.data_generator(val_data, train=False, opt=opt)
 # test_dl_generator = data_utils.data_generator(test_data, train=False, dynamic_length=True, opt=opt)
 
 ### ### ### ### ### ### ### ### 
@@ -64,14 +64,14 @@ val_generator = data_utils.data_generator(val_data, train=False, opt=opt)
 ### ! Setup Models ! ###
 netG = generator.Generator(1, 64, (3, 3, 3), 2, device).to(device)
 
-if(device.type == 'cuda' and (ngpu > 1)):
-    netG = nn.DataParallel(netG, list(range(ngpu)))
+if(device.type == 'cuda' and (opt.ngpu > 1)):
+    netG = nn.DataParallel(netG, list(range(opt.ngpu)))
 
 netG.apply(weight_init.weight_init)
 
 netD = discriminator.Discriminator().to(device)
-if(device.type == 'cuda' and (ngpu > 1)):
-    netD = nn.DataParallel(netD, list(range(ngpu)))
+if(device.type == 'cuda' and (opt.ngpu > 1)):
+    netD = nn.DataParallel(netD, list(range(opt.ngpu)))
 netD.apply(weight_init.weight_init)
 
 ### ### ### ### ### ### ### ### 
@@ -101,10 +101,6 @@ G_losses = []
 for epoch in range(opt.n_epoches):
     for index, (start_end, inter_seq, ts) in enumerate(train_generator):
         # data: batch_size, seq_len, 1, dim_x, dim_y, dim_z
-        # get frames in between
-        # print("start-end size", start_end.size())
-        # print("subset size", inter_seq.size())
-        # print(start_end[0][0][0][0][32])
         start_end = start_end.to(device)
         inter_seq = inter_seq.to(device)
 
@@ -156,7 +152,7 @@ for epoch in range(opt.n_epoches):
                     for ff, fm_genearated in enumerate(feature_map_genearated):
                 #         print(fm_genearated.size())
                 #         print(feature_maps_real[f][ff].size())
-                        err = lossG(fm_genearated, feature_maps_real[f][ff])
+                        err = lossG(fm_genearated, feature_maps_real[f][ff].detach())
                         errG_3 = err + errG_3
 
                 errG = 0.001 * errG_1 + errG_2  + errG_3 * 0.05
@@ -168,27 +164,17 @@ for epoch in range(opt.n_epoches):
         
         print('epoch [{}/{}], G loss:{:.4f}, D loss:{:.4f}'.format(epoch+1, opt.n_epoches, errG.data, errD.data))
 
-#         # validation 
-#         # if epoch % 9 == 0:
-#         with torch.no_grad():
-#             for i, (d, t) in enumerate(val_generator):
-#                 d = d.to(device)
-#                 model.eval()
-#                 val_out = model(d)
-#                 val_loss = distance(val_out, d)
-#                 print('epoch [{}/{}], val loss:{:.4f}'.format(epoch+1, opt.n_epoches, val_loss.data))
-#                 vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([val_loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='val loss')
-        # save data         
-        if epoch % 10 == 0:
+        #         print('epoch [{}/{}], val loss:{:.4f}'.format(epoch+1, opt.n_epoches, val_loss.data))
+# #                 vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([val_loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='val loss')
+#         # save data         
+        if epoch % 20 == 0:
             for i, out in enumerate(fake):
                 for ii, o in enumerate(out):
-                    name = '%s/volume%03d_%03d_%03d_%02d.raw' % (save_dir, index+1, epoch+1, i + 1, ii)
+                    name = '%s/volume_data%03d_epoch%03d_batch%03d_%02d.raw' % (save_dir, index+1, epoch+1, i + 1, ii)
                     d = o.cpu().detach().numpy()
-                    d = np.reshape(d, (64, 64, 64))
+                    d = np.reshape(d, (opt.dataDims, opt.dataDims, opt.dataDims))
                     d.astype(np.float32)
                     d.tofile(name)
-
-#         # ===================log========================
 
 # Draw loss 
 
