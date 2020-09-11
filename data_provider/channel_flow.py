@@ -71,14 +71,6 @@ class ChannelFlowDataset(Dataset):
         if not self.seed_is_set:
             self.seed_is_set = True
             np.random.seed(seed)
-    
-    def get_seq_len(self):
-        if self.train:
-            seq_len = np.random.randint(low=10, high=self.max_seq_len+1)
-        else:
-            seq_len = np.random.randint(low=6, high=self.max_seq_len+1)
-
-        return seq_len
 
     def __getitem__(self, index):
         self.set_seed(index)

@@ -26,14 +26,14 @@ class Generator(nn.Module):
         # print("first add size", v0.size())
         for i in range(self.generate_step):
             v0 = weights[i][0] * start + weights[i][1] * end 
-            v1 = 0.5 * (forward[i] + backward[i])
+            v1 = 0.5 * (forward[i] + backward[self.generate_step - i - 1])
             v = v1 + v0
             v_list[i] = v
             # print("add size", v1.size())
         return v_list
 
         
-    def forward(self, input_tensor, hidden_state=None):
+    def forward(self, input_tensor):
         ## get x_start and x_end 
         ## input_tensor (batch_size, seq_len, features, dim_x, dim_y, dim_z)
         start = input_tensor[:, 0, :, :, :, :]
@@ -53,7 +53,7 @@ class Generator(nn.Module):
             out_feature_forward = torch.reshape(out_feature_forward, (out_feature_forward.size()[0], 1, out_feature_forward.size()[1], out_feature_forward.size()[2], out_feature_forward.size()[3], out_feature_forward.size()[4]))
         
             out_lstm_forward, h_forward = self.convlstm(out_feature_forward, hidden_state_forward)
-            # print("out lstm size", len(out_lstm_forward), out_lstm_forward[1].size())
+            # print("out lstm size",  out_lstm_forward[0].size())
             # print("cell state size", len(h_forward), h_forward[0][0].size(), h_forward[0][1].size())
             # feed output into upscale 
             out_lstm_forward = out_lstm_forward[1]
@@ -88,7 +88,7 @@ class Generator(nn.Module):
 
         # print("forward size", out_frames_forward.size())
         # print("backward size", out_frames_backward.size())
-        weights = [[0.8, 0.2], [0.2, 0.8]]
+        weights = [[0.6, 0.4], [0.4, 0.6]]
         v_list = self.blend(start, end, out_frames_forward, out_frames_backward, weights)
 
         return v_list

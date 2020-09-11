@@ -62,7 +62,7 @@ def load_dataset(opt):
 
 def data_generator(data, train=True, dynamic_length=True, opt=None):
     if train:
-        loader = DataLoader(data, batch_size=opt.batchSize, shuffle=True, drop_last=True, num_workers=1)
+        loader = DataLoader(data, batch_size=opt.batchSize, shuffle=False, drop_last=True, num_workers=1)
     else:
         loader = DataLoader(data, batch_size=opt.batchSize, shuffle=True, drop_last=True, num_workers=1)
     

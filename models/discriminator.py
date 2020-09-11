@@ -55,7 +55,6 @@ class Discriminator(nn.Module):
             # print("out 4 tensor", out4[i].size())
 
             out = self.sn5(out4)
-            feature_map.append(out)
             out = self.relu5(out)
             # print("out tensor", out[i].size())
 

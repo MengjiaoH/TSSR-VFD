@@ -12,19 +12,19 @@ class BasicBlock(nn.Module):
         self.device = device 
 
         self.main = nn.Sequential(
-            nn.utils.spectral_norm(nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False), eps=0.0001),
+            nn.utils.spectral_norm(nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=True), eps=0.0001),
             # nn.Conv3d(in_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
             # nn.BatchNorm3d(out_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False), eps=0.0001),
+            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=True), eps=0.0001),
             # nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
             # nn.BatchNorm3d(out_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False), eps=0.0001),
+            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=True), eps=0.0001),
             # nn.Conv3d(out_channels, out_channels, self.kernel_size, 1, self.padding, bias=False),
             # nn.BatchNorm3d(out_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False), eps=0.0001),
+            nn.utils.spectral_norm(nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=True), eps=0.0001),
             nn.LeakyReLU(0.2, inplace=True),
             # nn.Conv3d(out_channels, out_channels, self.kernel_size, stride, self.padding, bias=False),
             # nn.Sigmoid()

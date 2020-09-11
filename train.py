@@ -33,7 +33,7 @@ parser.add_argument('--dataDims', type=int, default=32, help='dimension of data'
 parser.add_argument('--fields', type=int, default=1, help='number fields of dataset')
 parser.add_argument('--seq_len', type=int, default=4, help='max sequence length')
 parser.add_argument('--n_epoches', type=int, default=200, help='number of epoches')
-parser.add_argument('--batchSize', type=int, default=5, help='batch size')
+parser.add_argument('--batchSize', type=int, default=10, help='batch size')
 parser.add_argument('--ng', type=int, default=1, help='loop for generator')
 parser.add_argument('--nd', type=int, default=2, help='loop for discriminator')
 parser.add_argument('--lr', type=float, default=0.0002, help='loop for discriminator')
@@ -85,7 +85,7 @@ lossG = nn.MSELoss()
 # BCELoss()
 # MSELoss()
 optimizerG = optim.Adam(netG.parameters(), lr=0.0001, betas=(opt.beta1, 0.999))
-optimizerD = optim.Adam(netD.parameters(), lr=0.0004, betas=(opt.beta1, 0.999))
+optimizerD = optim.Adam(netD.parameters(), lr=0.0003, betas=(opt.beta1, 0.999))
 
 real_label = 1
 fake_label = 0
@@ -98,11 +98,12 @@ fake_label = 0
 D_losses = []
 G_losses = []
 
-for epoch in range(opt.n_epoches):
+for epoch in range(1, opt.n_epoches+1):
     for index, (start_end, inter_seq, ts) in enumerate(train_generator):
         # data: batch_size, seq_len, 1, dim_x, dim_y, dim_z
         start_end = start_end.to(device)
         inter_seq = inter_seq.to(device)
+        # prints("ts", ts)
 
         for i in range(opt.nd):
             ############################
@@ -114,7 +115,6 @@ for epoch in range(opt.n_epoches):
             # label = torch.reshape(label, (opt.batchSize * (opt.seq_len - 2), ))
             # print("read label", label)
             output, _ = netD(inter_seq)
-            # feature_maps_real = feature_maps_real.detach()
             # print("real output", output)
             errD_real = criterion(output, label)
             errD_real.backward()
@@ -147,36 +147,50 @@ for epoch in range(opt.n_epoches):
                 errG_1 = lossG(output, label)
                 errG_2 = lossG(fake, inter_seq)
                 errG_3 = 0
-                # errG_3 = lossG(feature_maps_generated, feature_maps_real)
                 for f, feature_map_genearated in enumerate(feature_maps_generated):
                     for ff, fm_genearated in enumerate(feature_map_genearated):
                 #         print(fm_genearated.size())
                 #         print(feature_maps_real[f][ff].size())
-                        err = lossG(fm_genearated, feature_maps_real[f][ff].detach())
+                        err = lossG(fm_genearated, feature_maps_real[f][ff])
                         errG_3 = err + errG_3
 
-                errG = 0.001 * errG_1 + errG_2  + errG_3 * 0.05
+                errG = 0.001 * errG_1 + errG_2  
+                # + errG_3 * 0.05
                 errG.backward()
                 optimizerG.step()
 
                 G_losses.append(errG.item())
                 # vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([errG]).unsqueeze(0).cpu(),win=loss_window,update='append', name='G loss')
         
-        print('epoch [{}/{}], G loss:{:.4f}, D loss:{:.4f}'.format(epoch+1, opt.n_epoches, errG.data, errD.data))
+        print('epoch [{}/{}], G loss:{:.4f}, D loss:{:.4f}'.format(epoch, opt.n_epoches, errG.data, errD.data))
 
         #         print('epoch [{}/{}], val loss:{:.4f}'.format(epoch+1, opt.n_epoches, val_loss.data))
 # #                 vis.line(X=np.ones((1, 1))*epoch,Y=torch.Tensor([val_loss]).unsqueeze(0).cpu(),win=loss_window,update='append', name='val loss')
 #         # save data         
         if epoch % 20 == 0:
             for i, out in enumerate(fake):
+                # print("ts", ts[i])
+                # print("fake ", fake.size())
                 for ii, o in enumerate(out):
-                    name = '%s/volume_data%03d_epoch%03d_batch%03d_%02d.raw' % (save_dir, index+1, epoch+1, i + 1, ii)
+                    batch_index = i 
+                    time_step = ts[i][ii + 1]
+                    # print("time step", time_step)
+                    name = '%s/volume_data%03d_epoch%03d.raw' % (save_dir, time_step, epoch)
                     d = o.cpu().detach().numpy()
                     d = np.reshape(d, (opt.dataDims, opt.dataDims, opt.dataDims))
                     d.astype(np.float32)
                     d.tofile(name)
 
-# Draw loss 
+## generate using other data 
+
+# save loss to txt 
+G_losses = np.array(G_losses)
+D_losses = np.array(D_losses)
+G_file = "G_loss.txt"
+D_file = "D_loss.txt"
+np.savetxt(G_file, G_losses, delimiter=' ')
+np.savetxt(D_file, D_losses, delimiter=' ')
+
 
         
 
